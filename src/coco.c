@@ -316,7 +316,7 @@ void validate_coco_recall(char *cfgfile, char *weightfile)
     }
 }
 
-void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
+void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh,char** frames,int frame_size)
 {
     image **alphabet = load_alphabet();
     network net = parse_network_cfg(cfgfile);
@@ -334,6 +334,39 @@ void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
     box *boxes = calloc(l.side*l.side*l.n, sizeof(box));
     float **probs = calloc(l.side*l.side*l.n, sizeof(float *));
     for(j = 0; j < l.side*l.side*l.n; ++j) probs[j] = calloc(l.classes, sizeof(float *));
+    if(frames) //my support on frames
+    {
+	for(int i = 0; i < frame_size; i++)
+	{
+		printf("here: %s\n",frames[i]);
+		image im = load_image_color(frames[i],0,0);
+		image sized = resize_image(im,net.w,net.h);
+		float *X = sized.data;
+		time = clock();
+		network_predict(net, X);
+		printf("%s: Predicted in %f seconds.\n", input, sec(clock()-time));
+		get_detection_boxes(l, 1, 1, thresh, probs, boxes, 0);
+		if (nms) do_nms_sort(boxes, probs, l.side*l.side*l.n, l.classes, nms);
+		draw_detections(im, l.side*l.side*l.n, thresh, boxes, probs, coco_classes, alphabet, 80);
+		char* out_name = strcat(frames[i],"_out");
+		strcpy(out_name,frames[i]);
+		printf("here\n");
+		if(out_name == NULL)
+		{
+			printf("Unable to allocate memory\n");
+			return;
+		}
+		printf("out_name:%s",out_name);
+		save_image(im,out_name);
+		printf("Frame and box has been written to %s\n",out_name);
+		free_image(im);
+		free_image(sized);
+		printf("here****\n");
+
+	}
+	return;
+    }
+    strncpy(filename,input,256);
     while(1){
         if(filename){
             strncpy(input, filename, 256);
@@ -380,7 +413,22 @@ void run_coco(int argc, char **argv)
     char *cfg = argv[3];
     char *weights = (argc > 4) ? argv[4] : 0;
     char *filename = (argc > 5) ? argv[5]: 0;
-    if(0==strcmp(argv[2], "test")) test_coco(cfg, weights, filename, thresh);
+    char ** frames = 0;
+    int frame_size = 0;
+    if (argc > 5)
+    {
+	frame_size = argc - 5;
+	frames = (char**)calloc(frame_size, sizeof(char*));
+	for(int i = 0; i < frame_size; i++)
+	{
+		frames[i] = (char*)calloc(30,sizeof(char));
+	}
+    }
+    for (int i = 5; i < argc; i++)
+    {
+	strcpy(frames[i - 5],argv[i]);
+    }
+    if(0==strcmp(argv[2], "test")) test_coco(cfg, weights, filename, thresh,frames,frame_size);
     else if(0==strcmp(argv[2], "train")) train_coco(cfg, weights);
     else if(0==strcmp(argv[2], "valid")) validate_coco(cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_coco_recall(cfg, weights);
